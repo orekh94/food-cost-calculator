@@ -2,25 +2,22 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Профессиональный калькулятор себестоимости</title>
     <style>
-        /* Основные стили остаются прежними */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
         }
-        .modal-content {
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
             background: white;
             padding: 20px;
-            width: 80%;
-            max-width: 600px;
-            margin: 20px auto;
             border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
         .tabs {
             display: flex;
@@ -35,37 +32,94 @@
         .tab.active {
             border-color: #4CAF50;
         }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: white;
+            padding: 20px;
+            width: 90%;
+            max-width: 500px;
+            border-radius: 8px;
+            position: relative;
+        }
+        .close-modal {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            cursor: pointer;
+            font-size: 24px;
+        }
         .supplier-price {
             display: flex;
             gap: 10px;
-            margin-bottom: 5px;
+            margin-bottom: 10px;
+        }
+        .ingredient-item, .supplier-item {
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .search-filter {
+            margin-bottom: 20px;
+        }
+        .search-filter input, .search-filter select {
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Основной интерфейс калькулятора -->
         <div class="tabs">
             <div class="tab active" onclick="showTab('calculator')">Калькулятор</div>
             <div class="tab" onclick="showTab('ingredients-db')">База ингредиентов</div>
             <div class="tab" onclick="showTab('suppliers')">Поставщики</div>
         </div>
 
-        <div id="calculator-tab" class="tab-content">
-            <!-- Исходный интерфейс калькулятора -->
+        <div id="calculator-tab" class="tab-content active">
+            <h2>Калькулятор себестоимости</h2>
+            <div id="calculator-interface">
+                <!-- Интерфейс калькулятора будет здесь -->
+            </div>
         </div>
 
-        <div id="ingredients-db-tab" class="tab-content hidden">
-            <h3>Управление базой ингредиентов</h3>
+        <div id="ingredients-db-tab" class="tab-content">
+            <h2>База ингредиентов</h2>
+            <div class="search-filter">
+                <input type="text" id="search-ingredient" placeholder="Поиск по названию" oninput="filterIngredients()">
+                <select id="filter-category" onchange="filterIngredients()">
+                    <option value="">Все категории</option>
+                    <option value="Овощи">Овощи</option>
+                    <option value="Мясо">Мясо</option>
+                    <option value="Бакалея">Бакалея</option>
+                </select>
+            </div>
             <button onclick="exportData()">Экспорт данных</button>
             <button onclick="document.getElementById('import-input').click()">Импорт данных</button>
             <input type="file" id="import-input" hidden onchange="importData(this)">
-            
             <div id="ingredients-list"></div>
         </div>
 
-        <div id="suppliers-tab" class="tab-content hidden">
-            <h3>Управление поставщиками</h3>
+        <div id="suppliers-tab" class="tab-content">
+            <h2>Управление поставщиками</h2>
             <div id="suppliers-list"></div>
             <button onclick="addSupplier()">+ Добавить поставщика</button>
         </div>
@@ -73,6 +127,7 @@
         <!-- Модальное окно редактирования ингредиента -->
         <div id="edit-ingredient-modal" class="modal">
             <div class="modal-content">
+                <span class="close-modal" onclick="closeModal()">&times;</span>
                 <h3>Редактирование ингредиента</h3>
                 <form id="edit-ingredient-form">
                     <label>Название: <input type="text" name="name" required></label>
@@ -106,9 +161,9 @@
 
         // Показ вкладок
         function showTab(tabName) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-            document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
             document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
         }
 
@@ -130,57 +185,39 @@
             });
         }
 
-        // Редактирование ингредиента
-        function editIngredient(index) {
-            const ingredient = appData.ingredients[index];
-            const form = document.getElementById('edit-ingredient-form');
+        // Фильтрация ингредиентов
+        function filterIngredients() {
+            const searchText = document.getElementById('search-ingredient').value.toLowerCase();
+            const category = document.getElementById('filter-category').value;
             
-            form.elements.name.value = ingredient.name;
-            form.elements.category.value = ingredient.category;
-            
-            // Очистка предыдущих цен
-            const pricesContainer = document.getElementById('supplier-prices');
-            pricesContainer.innerHTML = '';
-            
-            // Добавление полей для цен поставщиков
-            appData.suppliers.forEach(supplier => {
-                const price = ingredient.prices.find(p => p.supplier === supplier)?.price || '';
-                const div = document.createElement('div');
-                div.className = 'supplier-price';
-                div.innerHTML = `
-                    <label>${supplier}: 
-                        <input type="number" 
-                               value="${price}" 
-                               data-supplier="${supplier}"
-                               step="0.01">
-                    </label>
-                `;
-                pricesContainer.appendChild(div);
+            const filtered = appData.ingredients.filter(ingredient => {
+                const matchesSearch = ingredient.name.toLowerCase().includes(searchText);
+                const matchesCategory = !category || ingredient.category === category;
+                return matchesSearch && matchesCategory;
             });
             
-            // Показ модального окна
-            document.getElementById('edit-ingredient-modal').style.display = 'block';
-            
-            // Обработчик сохранения
-            form.onsubmit = (e) => {
-                e.preventDefault();
-                const prices = Array.from(pricesContainer.querySelectorAll('input'))
-                    .map(input => ({
-                        supplier: input.dataset.supplier,
-                        price: parseFloat(input.value) || 0
-                    }));
-                
-                appData.ingredients[index] = {
-                    ...ingredient,
-                    name: form.elements.name.value,
-                    category: form.elements.category.value,
-                    prices
-                };
-                
+            const container = document.getElementById('ingredients-list');
+            container.innerHTML = '';
+            filtered.forEach((ingredient, index) => {
+                const div = document.createElement('div');
+                div.className = 'ingredient-item';
+                div.innerHTML = `
+                    <h4>${ingredient.name} (${ingredient.category})</h4>
+                    <p>Цены: ${ingredient.prices.map(p => `${p.supplier}: ${p.price} руб.`).join(', ')}</p>
+                    <button onclick="editIngredient(${index})">Редактировать</button>
+                    <button onclick="deleteIngredient(${index})">Удалить</button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Удаление ингредиента
+        function deleteIngredient(index) {
+            if (confirm('Вы уверены, что хотите удалить этот ингредиент?')) {
+                appData.ingredients.splice(index, 1);
                 saveData();
                 renderIngredientsList();
-                closeModal();
-            };
+            }
         }
 
         // Управление поставщиками
@@ -199,6 +236,24 @@
             const name = prompt('Введите название поставщика:');
             if (name && !appData.suppliers.includes(name)) {
                 appData.suppliers.push(name);
+                saveData();
+                renderSuppliersList();
+            }
+        }
+
+        function updateSupplier(index, newName) {
+            if (newName && !appData.suppliers.includes(newName)) {
+                appData.suppliers[index] = newName;
+                saveData();
+                renderSuppliersList();
+            } else {
+                alert('Поставщик с таким именем уже существует или имя не указано.');
+            }
+        }
+
+        function deleteSupplier(index) {
+            if (confirm('Вы уверены, что хотите удалить этого поставщика?')) {
+                appData.suppliers.splice(index, 1);
                 saveData();
                 renderSuppliersList();
             }
