@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Профессиональный калькулятор себестоимости</title>
+    <style>
+        /* Основные стили остаются прежними */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background: white;
+            padding: 20px;
+            width: 80%;
+            max-width: 600px;
+            margin: 20px auto;
+            border-radius: 8px;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        .tab.active {
+            border-color: #4CAF50;
+        }
+        .supplier-price {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Основной интерфейс калькулятора -->
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('calculator')">Калькулятор</div>
+            <div class="tab" onclick="showTab('ingredients-db')">База ингредиентов</div>
+            <div class="tab" onclick="showTab('suppliers')">Поставщики</div>
+        </div>
+
+        <div id="calculator-tab" class="tab-content">
+            <!-- Исходный интерфейс калькулятора -->
+        </div>
+
+        <div id="ingredients-db-tab" class="tab-content hidden">
+            <h3>Управление базой ингредиентов</h3>
+            <button onclick="exportData()">Экспорт данных</button>
+            <button onclick="document.getElementById('import-input').click()">Импорт данных</button>
+            <input type="file" id="import-input" hidden onchange="importData(this)">
+            
+            <div id="ingredients-list"></div>
+        </div>
+
+        <div id="suppliers-tab" class="tab-content hidden">
+            <h3>Управление поставщиками</h3>
+            <div id="suppliers-list"></div>
+            <button onclick="addSupplier()">+ Добавить поставщика</button>
+        </div>
+
+        <!-- Модальное окно редактирования ингредиента -->
+        <div id="edit-ingredient-modal" class="modal">
+            <div class="modal-content">
+                <h3>Редактирование ингредиента</h3>
+                <form id="edit-ingredient-form">
+                    <label>Название: <input type="text" name="name" required></label>
+                    <label>Категория: 
+                        <select name="category">
+                            <option value="Овощи">Овощи</option>
+                            <option value="Мясо">Мясо</option>
+                            <option value="Бакалея">Бакалея</option>
+                        </select>
+                    </label>
+                    <div id="supplier-prices"></div>
+                    <button type="submit">Сохранить</button>
+                    <button type="button" onclick="closeModal()">Отмена</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let appData = {
+            ingredients: JSON.parse(localStorage.getItem('ingredients')) || [],
+            suppliers: JSON.parse(localStorage.getItem('suppliers')) || [],
+            categories: ['Овощи', 'Мясо', 'Бакалея', 'Молочные продукты', 'Рыба']
+        };
+
+        // Инициализация
+        function init() {
+            renderIngredientsList();
+            renderSuppliersList();
+        }
+
+        // Показ вкладок
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+            document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
+        }
+
+        // Редактор ингредиентов
+        function renderIngredientsList() {
+            const container = document.getElementById('ingredients-list');
+            container.innerHTML = '';
+            
+            appData.ingredients.forEach((ingredient, index) => {
+                const div = document.createElement('div');
+                div.className = 'ingredient-item';
+                div.innerHTML = `
+                    <h4>${ingredient.name} (${ingredient.category})</h4>
+                    <p>Цены: ${ingredient.prices.map(p => `${p.supplier}: ${p.price} руб.`).join(', ')}</p>
+                    <button onclick="editIngredient(${index})">Редактировать</button>
+                    <button onclick="deleteIngredient(${index})">Удалить</button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Редактирование ингредиента
+        function editIngredient(index) {
+            const ingredient = appData.ingredients[index];
+            const form = document.getElementById('edit-ingredient-form');
+            
+            form.elements.name.value = ingredient.name;
+            form.elements.category.value = ingredient.category;
+            
+            // Очистка предыдущих цен
+            const pricesContainer = document.getElementById('supplier-prices');
+            pricesContainer.innerHTML = '';
+            
+            // Добавление полей для цен поставщиков
+            appData.suppliers.forEach(supplier => {
+                const price = ingredient.prices.find(p => p.supplier === supplier)?.price || '';
+                const div = document.createElement('div');
+                div.className = 'supplier-price';
+                div.innerHTML = `
+                    <label>${supplier}: 
+                        <input type="number" 
+                               value="${price}" 
+                               data-supplier="${supplier}"
+                               step="0.01">
+                    </label>
+                `;
+                pricesContainer.appendChild(div);
+            });
+            
+            // Показ модального окна
+            document.getElementById('edit-ingredient-modal').style.display = 'block';
+            
+            // Обработчик сохранения
+            form.onsubmit = (e) => {
+                e.preventDefault();
+                const prices = Array.from(pricesContainer.querySelectorAll('input'))
+                    .map(input => ({
+                        supplier: input.dataset.supplier,
+                        price: parseFloat(input.value) || 0
+                    }));
+                
+                appData.ingredients[index] = {
+                    ...ingredient,
+                    name: form.elements.name.value,
+                    category: form.elements.category.value,
+                    prices
+                };
+                
+                saveData();
+                renderIngredientsList();
+                closeModal();
+            };
+        }
+
+        // Управление поставщиками
+        function renderSuppliersList() {
+            const container = document.getElementById('suppliers-list');
+            container.innerHTML = appData.suppliers.map((supplier, index) => `
+                <div class="supplier-item">
+                    <input type="text" value="${supplier}" 
+                           onchange="updateSupplier(${index}, this.value)">
+                    <button onclick="deleteSupplier(${index})">×</button>
+                </div>
+            `).join('');
+        }
+
+        function addSupplier() {
+            const name = prompt('Введите название поставщика:');
+            if (name && !appData.suppliers.includes(name)) {
+                appData.suppliers.push(name);
+                saveData();
+                renderSuppliersList();
+            }
+        }
+
+        // Экспорт/импорт данных
+        function exportData() {
+            const data = JSON.stringify(appData);
+            const blob = new Blob([data], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'ingredients-backup.json';
+            a.click();
+        }
+
+        async function importData(input) {
+            const file = input.files[0];
+            if (file) {
+                const data = JSON.parse(await file.text());
+                appData = data;
+                saveData();
+                init();
+            }
+        }
+
+        // Вспомогательные функции
+        function saveData() {
+            localStorage.setItem('ingredients', JSON.stringify(appData.ingredients));
+            localStorage.setItem('suppliers', JSON.stringify(appData.suppliers));
+        }
+
+        function closeModal() {
+            document.getElementById('edit-ingredient-modal').style.display = 'none';
+        }
+
+        init();
+    </script>
+</body>
+</html>
